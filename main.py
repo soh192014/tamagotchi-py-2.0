@@ -95,13 +95,17 @@ class CyberPetGame:
         self.last_sign_date = ""
         
         # 🧬 [新增] 年龄系统基础变量
-        self.age = 0
+        self.age = 1
         self.last_age_update_time = int(time.time()) # 记录上一次年龄递增的时间戳
         
         self.load_game()
         
         # 🚀 [新增] 启动后台年龄递增守护线程
         self.start_age_timer()
+
+        # 🌤️ 天气锁定系统控制变量
+        self.current_weather = "晴朗"  # 缺省初始天气
+        self.last_weather_update_time = 0  # 上一次天气刷新时间戳
 
     # ================= ⏳ 后台年龄自动生长系统 =================
     def start_age_timer(self):
@@ -231,8 +235,17 @@ class CyberPetGame:
 
     def display_status(self):
         self.clear()
-        try: self.weather = generate_random_weather()["name"]
-        except Exception: pass
+        # ======= 🌤️ 5分钟动态天气锁定引擎 =======
+        now = int(time.time())
+        # 5分钟 = 5 * 60 = 300秒
+        if now - self.last_weather_update_time >= 300:
+            try:
+                # 跨越5分钟阈值，允许重新抽取天气
+                self.current_weather = generate_random_weather()["name"]
+            except Exception:
+                self.current_weather = "未知空域"
+            # 锁定当前变天的时间戳
+            self.last_weather_update_time = now
         print(Fore.CYAN + "=========================================================")
         print(Fore.LIGHTCYAN_EX + f" 🪐 宠物模拟器 v3.5.5 | 当前天气环境: {self.weather}")
         print(Fore.CYAN + "=========================================================")
@@ -243,6 +256,7 @@ class CyberPetGame:
         print(GOLD_COLOR + f" 💰 钱包余额: {self.coins} c")
         print(Fore.RED + f" ❤️ 生命状态: {self.hp}/{self.max_hp} | 🍔 饥饿程度: {self.food}/{self.max_food}")
         print(Fore.BLUE + f" ⚡ 剩余精力: {self.energy}/{self.max_energy} | ✨ 幸福指数: {self.happiness}/{self.max_happiness}")
+        print(Fore.CYAN + f" 🕒 年龄: {self.age} 岁")
         print(Fore.GREEN+ " make by @soh_192014")
         print(Fore.CYAN + "=========================================================")
     def check_achievement(self, ach_name):
@@ -696,13 +710,13 @@ class CyberPetGame:
             print(f"  ⭐ 荣誉勋章: 【{ach}】")
         input("\n↩️ 按任意键返回...")
 
-    # ================= 👑 网络中央天梯财富榜 =================
+    # ================= 👑 网络中央天梯财富榜（全网互通 + 环境自动构建版） =================
     def internet_leaderboard(self):
         self.clear()
         print(Fore.YELLOW + "=========================================================")
-        print(Fore.LIGHTYELLOW_EX + "        👑 接入星际联储网络 - 中央天梯财富榜单")
+        print(Fore.LIGHTYELLOW_EX + "        👑 接入星际联储网络 - 全网交互天梯榜单")
         print(Fore.YELLOW + "=========================================================")
-        print(Fore.CYAN + "📡 正在对星际中央母舰服务器集群执行全网握手同步...")
+        print(Fore.CYAN + "📡 正在向星际母舰集群上报您的存盘并同步全网数据...")
         
         env_file = ".env"
         default_bin_url = "https://api.jsonbin.io/v3/b/6a1a3ba221f9ee59d29c39dc"
@@ -718,87 +732,113 @@ class CyberPetGame:
                     f.write("# 是否跳过安全证书验证（True 表示跳过，用于强行修复 SSL/TSL 握手报错）\n")
                     f.write("BYPASS_SSL_VERIFY=True\n\n")
                     f.write("# 星际联储中央天梯真实 API 母舰数据接口\n")
-                    f.write(f"LEADERBOARD_API_URL={default_bin_url}\n")
+                    f.write(f"LEADERBOARD_API_URL={default_bin_url}\n\n")
+                    f.write("# 🔑 极其关键：您的 JsonBin 专属密钥（从 JsonBin 官网控制台复制出来的 Master Key）\n")
+                    f.write("# 只有填入您自己的 Key，其他用户的游戏程序才能安全地把他们的数据合并写进这个箱子里！\n")
+                    f.write("JSONBIN_MASTER_KEY=\n")
                 print(Fore.GREEN + "✅ .env 环境配置云端网关文件已在根目录安全生成！")
             except Exception as e:
                 print(Fore.RED + f"⚠️  .env 自动生成受阻（可能权限不足），系统将启用内核后备数据源。原因: {e}")
 
         try:
-            # ======= 🔌 载入并读取环境配置 =======
+            # 🔌 载入并读取环境配置
             try:
                 from dotenv import load_dotenv
                 load_dotenv()
             except ImportError:
                 pass
 
-            # 动态读取（如果刚才自动生成了，现在就能无缝读到，没读到则用默认保底网址）
             api_url = os.getenv("LEADERBOARD_API_URL", default_bin_url)
             env_bypass = os.getenv("BYPASS_SSL_VERIFY", "True").lower() in ("true", "1")
+            master_key = os.getenv("JSONBIN_MASTER_KEY", "").strip()
             
             headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                "User-Agent": "Mozilla/5.0",
                 "Content-Type": "application/json"
             }
+            if master_key:
+                headers["X-Master-Key"] = master_key  # 只有配置了 Key 才会注入安全报头
 
             if env_bypass:
                 import urllib3
                 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-            # ======= 📡 自动执行云端查找排行榜数据 =======
-            res = requests.get(
-                api_url, 
-                headers=headers, 
-                verify=not env_bypass, 
-                timeout=6
-            )
+            # 🔄 【第一步：拉取全网已有数据】
+            res_get = requests.get(api_url, headers=headers, verify=not env_bypass, timeout=6)
+            rank_list = []
             
-            if res.status_code == 200:
-                res_data = res.json()
-                # 智能拆解解包 JsonBin.io v3 的 record 包裹外壳
+            if res_get.status_code == 200:
+                res_data = res_get.json()
                 record = res_data.get("record", {})
-                
                 if isinstance(record, dict):
                     rank_list = record.get("data", [])
                 elif isinstance(record, list):
                     rank_list = record
-                else:
-                    rank_list = res_data.get("data", []) if isinstance(res_data, dict) else []
+                if not isinstance(rank_list, list):
+                    rank_list = []
+            
+            # 🔄 【第二步：把当前玩家的最新真实数据融合进去】
+            current_player_data = {
+                "name": self.name,
+                "coins": self.coins,
+                "level": self.level,
+                "age": self.age
+            }
+            
+            player_exist = False
+            for player in rank_list:
+                if player.get("name") == self.name:
+                    # 找到了同名账户，直接更新数据
+                    player["coins"] = self.coins
+                    player["level"] = self.level
+                    player["age"] = self.age
+                    player_exist = True
+                    break
+            
+            if not player_exist:
+                # 新玩家，直接追加到全网大名单末尾
+                rank_list.append(current_player_data)
 
-                print(Fore.GREEN + "✨ [网络握手成功]！数据已实时同步到您的星际中央服务器：\n")
-                
-                if rank_list and isinstance(rank_list, list):
-                    for idx, player in enumerate(rank_list[:5], 1):
-                        p_name = player.get("name", "无名拓荒者")
-                        p_coins = player.get("coins", 0)
-                        p_lv = player.get("level", 1)
-                        # 📡 核心修复：尝试读取别的玩家的真实年龄，如果云端没有，则保底显示“未知”或 0
-                        p_age = player.get("age", "未知") 
-                        
-                        if p_name == self.name:
-                            # 如果是玩家自己，直接拉取本地最精准的 self.age
-                            print(Fore.GREEN + f"  [Rank {idx}] 🌟 (您) {p_name:<12} | 核心财富: {p_coins:,} c | 智能等级: Lv.{p_lv:<3} | 年龄: {self.age} 岁")
-                        else:
-                            g_color = GOLD_COLOR if 'GOLD_COLOR' in globals() else Fore.YELLOW
-                            if idx == 1:
-                                print(g_color + f"  [Rank 1] 👑 {p_name:<16} | 核心财富: {p_coins:,} c | 智能等级: Lv.{p_lv:<3} | 年龄: {p_age} 岁")
-                            else:
-                                print(Fore.WHITE + f"  [Rank {idx}]    {p_name:<16} | 核心财富: {p_coins:,} c | 智能等级: Lv.{p_lv:<3} | 年龄: {p_age} 岁")
-                else:
-                    # 云端无其他玩家存盘时，完美降级显示玩家自己
-                    print(Fore.GREEN + f"  [Rank 1] 🌟 (您) {self.name:<12} | 核心财富: {self.coins:,} c | 智能等级: Lv.{self.level:<3} | 年龄: {self.age} 岁")
-                    print(Fore.LIGHTBLACK_EX + "  (当前母舰星际数据库中暂无其他拓荒者存盘记录)")
+            # 🔄 【第三步：如果配置了 Key，将融合后的最新大名单 PUT 回云端】
+            if master_key:
+                update_payload = {"data": rank_list}
+                requests.put(api_url, json=update_payload, headers=headers, verify=not env_bypass, timeout=6)
             else:
-                raise Exception(f"服务器拒绝访问，HTTP 状态码: {res.status_code}")
+                print(Fore.YELLOW + "💡 提示： \n 当前检测到本地 .env 未配置 'JSONBIN_MASTER_KEY'，天梯已进入只读联机模式。")
+                print(Fore.YELLOW + "💡 这意味着您的数据虽然可以从云端拉取并显示，但无法写回更新到云端。请配置好 Key 后重试以获得完整体验！")
+                print(Fore.YELLOW + "💡 访问 https://jsonbin.io/ 注册账号并创建一个新的 Bin，复制 Master Key 填入 .env 后即可解锁完整的云端交互功能！")
+            # 🔄 【第四步：本地根据核心财富（coins）进行全网降序重排】
+            rank_list.sort(key=lambda x: x.get("coins", 0), reverse=True)
+
+            print(Fore.GREEN + "✨ [全网存盘数据同步完毕]！实时联储财富星际排行如下：\n")
+            
+            if rank_list:
+                for idx, player in enumerate(rank_list[:5], 1):
+                    p_name = player.get("name", "无名拓荒者")
+                    p_coins = player.get("coins", 0)
+                    p_lv = player.get("level", 1)
+                    p_age = player.get("age", 1)
+                    
+                    if p_name == self.name:
+                        # 高亮打印当前玩家自己
+                        print(Fore.GREEN + f"  [Rank {idx}] 🌟 (您) {p_name:<12} | 核心财富: {p_coins:,} c | 智能等级: Lv.{p_lv:<3} | 年龄: {self.age} 岁")
+                    else:
+                        g_color = GOLD_COLOR if 'GOLD_COLOR' in globals() else Fore.YELLOW
+                        if idx == 1:
+                            print(g_color + f"  [Rank 1] 👑 {p_name:<16} | 核心财富: {p_coins:,} c | 智能等级: Lv.{p_lv:<3} | 年龄: {p_age} 岁")
+                        else:
+                            print(Fore.WHITE + f"  [Rank {idx}]    {p_name:<16} | 核心财富: {p_coins:,} c | 智能等级: Lv.{p_lv:<3} | 年龄: {p_age} 岁")
+            else:
+                print(Fore.GREEN + f"  [Rank 1] 🌟 (您) {self.name:<12} | 核心财富: {self.coins:,} c | 智能等级: Lv.{self.level:<3} | 年龄: {self.age} 岁")
                 
         except Exception as e:
-            print(Fore.RED + f"❌ 链路连接超时。原因: {e}")
+            print(Fore.RED + f"❌ 🚀 跨维链路握手受阻。原因: {e}")
             print(Fore.YELLOW + f"⚠️ 无法连接到中央服务器，已自动降级显示本地数据。请检查网络连接或调整 .env 配置后重试。")
-            # 彻底修复 Fore.GRAY 崩溃隐患，采用标准的亮黑（深灰色）
             print(Fore.LIGHTBLACK_EX + f"  BIN_ID: {os.getenv('LEADERBOARD_API_URL', default_bin_url)}")
             print(Fore.GREEN + f"  [Rank 1] 🌟 (您) {self.name:<12} | 核心财富: {self.coins:,} c | 智能等级: Lv.{self.level:<3} | 年龄: {self.age} 岁")
+            
         print(Fore.YELLOW + "=========================================================")
         input("\n↩️ 按任意键关闭天梯...")
-
 # ====== 👑 核心总控与主循环 ======
 if __name__ == "__main__":
     game = CyberPetGame()
