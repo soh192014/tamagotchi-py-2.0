@@ -234,7 +234,7 @@ class CyberPetGame:
         try: self.weather = generate_random_weather()["name"]
         except Exception: pass
         print(Fore.CYAN + "=========================================================")
-        print(Fore.LIGHTCYAN_EX + f" 🪐 宠物模拟器 v3.5.2 | 当前天气环境: {self.weather}")
+        print(Fore.LIGHTCYAN_EX + f" 🪐 宠物模拟器 v3.5.5 | 当前天气环境: {self.weather}")
         print(Fore.CYAN + "=========================================================")
         self.animation_frame = (self.animation_frame + 1) % 2
         print(get_pet_animation(self.pet_type, self.animation_frame))
